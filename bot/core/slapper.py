@@ -188,7 +188,7 @@ class Slapper:
 
                         rank = profile_data['rank']
 
-                        logger.info(f"{self.session_name} | Balance: {balance} | Rank: {rank}")
+                        logger.info(f"{self.session_name} | Balance: <c>{balance}</c> | Rank: <m>{rank}</m>")
 
                         logger.info(f"{self.session_name} | Earned today: <g>+{earned_for_today}</g>")
                         logger.info(f"{self.session_name} | Earned week: <g>+{earned_for_week}</g>")
