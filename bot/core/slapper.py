@@ -5,6 +5,8 @@ from datetime import datetime
 from urllib.parse import unquote
 
 import aiohttp
+from aiohttp_proxy import ProxyConnector
+from better_proxy import Proxy
 from pyrogram import Client
 from pyrogram.errors import Unauthorized, UserDeactivated, AuthKeyUnregistered
 from pyrogram.raw.functions.messages import RequestWebView
@@ -21,8 +23,22 @@ class Slapper:
         self.session_name = tg_client.name
         self.tg_client = tg_client
 
-    async def get_tg_web_data(self) -> str:
+    async def get_tg_web_data(self, proxy: str | None) -> str:
         try:
+            if proxy:
+                proxy = Proxy.from_str(proxy)
+                proxy_dict = dict(
+                    scheme=proxy.protocol,
+                    hostname=proxy.host,
+                    port=proxy.port,
+                    username=proxy.login,
+                    password=proxy.password
+                )
+            else:
+                proxy_dict = None
+
+            self.tg_client.proxy = proxy_dict
+
             if not self.tg_client.is_connected:
                 try:
                     await self.tg_client.connect()
@@ -51,7 +67,7 @@ class Slapper:
             raise error
 
         except Exception as error:
-            logger.error(f"{self.session_name} | Unknown error during authorization: {error}")
+            logger.error(f"{self.session_name} | Unknown error during Authorization: {error}")
             await asyncio.sleep(delay=7)
 
     async def login(self, http_client: aiohttp.ClientSession, tg_web_data: str) -> str:
@@ -66,7 +82,7 @@ class Slapper:
 
             return access_token
         except Exception as error:
-            logger.error(f"{self.session_name} | Unknown error while retrieving Access Token: {error}")
+            logger.error(f"{self.session_name} | Unknown error while getting Access Token: {error}")
             await asyncio.sleep(delay=7)
 
     async def get_profile_data(self, http_client: aiohttp.ClientSession) -> dict[str]:
@@ -81,7 +97,7 @@ class Slapper:
 
             return profile_data
         except Exception as error:
-            logger.error(f"{self.session_name} | Unknown error while retrieving Profile Data: {error}")
+            logger.error(f"{self.session_name} | Unknown error while getting Profile Data: {error}")
             await asyncio.sleep(delay=7)
 
     async def apply_boost(self, http_client: aiohttp.ClientSession, boost_type: FreeBoosts) -> bool:
@@ -93,7 +109,7 @@ class Slapper:
 
             return True
         except Exception as error:
-            logger.error(f"{self.session_name} | Unknown error when apply {boost_type} boost: {error}")
+            logger.error(f"{self.session_name} | Unknown error when Apply {boost_type} Boost: {error}")
             await asyncio.sleep(delay=7)
 
             return False
@@ -143,7 +159,7 @@ class Slapper:
 
             return upgradable_boosts
         except Exception as error:
-            logger.error(f"{self.session_name} | Unknown error when getting Daily Boosts: {error}")
+            logger.error(f"{self.session_name} | Unknown error when getting Upgradable Boosts: {error}")
             await asyncio.sleep(delay=7)
 
     async def send_slaps(self, http_client: aiohttp.ClientSession, slaps: int, active_turbo: bool) -> dict[str]:
@@ -159,19 +175,31 @@ class Slapper:
 
             return player_data
         except Exception as error:
-            logger.error(f"{self.session_name} | Unknown error when slapping: {error}")
+            logger.error(f"{self.session_name} | Unknown error when Slapping: {error}")
             await asyncio.sleep(delay=7)
 
-    async def run(self) -> None:
+    async def check_proxy(self, http_client: aiohttp.ClientSession, proxy: Proxy) -> None:
+        try:
+            response = await http_client.get(url='https://httpbin.org/ip', timeout=aiohttp.ClientTimeout(5))
+            ip = (await response.json()).get('origin')
+            logger.info(f"{self.session_name} | Proxy IP: {ip}")
+        except Exception as error:
+            logger.error(f"{self.session_name} | Proxy: {proxy} | Error: {error}")
+
+    async def run(self, proxy: str | None) -> None:
         access_token_created_time = 0
-        turbo_time = 0
         active_turbo = False
 
-        async with aiohttp.ClientSession(headers=headers) as http_client:
+        proxy_conn = ProxyConnector().from_url(proxy) if proxy else None
+
+        async with aiohttp.ClientSession(headers=headers, connector=proxy_conn) as http_client:
+            if proxy:
+                await self.check_proxy(http_client=http_client, proxy=proxy)
+
             while True:
                 try:
                     if time() - access_token_created_time >= 3600:
-                        tg_web_data = await self.get_tg_web_data()
+                        tg_web_data = await self.get_tg_web_data(proxy=proxy)
                         access_token = await self.login(http_client=http_client, tg_web_data=tg_web_data)
 
                         http_client.headers["Authorization"] = f"Bearer {access_token}"
@@ -182,6 +210,8 @@ class Slapper:
                         profile_data = await self.get_profile_data(http_client=http_client)
 
                         balance = profile_data['score']
+
+                        slap_level = profile_data['energyPerTap']
 
                         earned_for_today = profile_data['earnedScoreToday']
                         earned_for_week = profile_data['earnedScoreThisWeek']
@@ -198,6 +228,8 @@ class Slapper:
                     if active_turbo:
                         slaps += settings.ADD_SLAPS_ON_TURBO
 
+                    slaps *= slap_level
+
                     player_data = await self.send_slaps(http_client=http_client, slaps=slaps, active_turbo=active_turbo)
 
                     if not player_data:
@@ -208,6 +240,7 @@ class Slapper:
                     calc_slaps = new_balance - balance
                     balance = new_balance
                     total = player_data['totalEarnedScore']
+                    slap_level = profile_data['energyPerTap']
 
                     daily_turbo_count, daily_energy_count = await self.get_daily_boosts(http_client=http_client)
 
@@ -324,8 +357,8 @@ class Slapper:
                     await asyncio.sleep(delay=sleep_between_clicks)
 
 
-async def run_slapper(tg_client: Client):
+async def run_slapper(tg_client: Client, proxy: str | None):
     try:
-        await Slapper(tg_client=tg_client).run()
+        await Slapper(tg_client=tg_client).run(proxy=proxy)
     except InvalidSession:
         logger.error(f"{tg_client.name} | Invalid Session")
