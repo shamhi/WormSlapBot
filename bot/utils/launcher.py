@@ -6,6 +6,7 @@ from itertools import cycle
 
 from pyrogram import Client
 from better_proxy import Proxy
+from TGConvertor import SessionManager
 
 from bot.config import settings
 from bot.utils import logger
@@ -43,6 +44,19 @@ def get_proxies() -> list[Proxy]:
     return proxies
 
 
+async def get_session_string(session_name: str) -> str | None:
+    session = None
+    for action in [SessionManager.from_pyrogram_file, SessionManager.from_telethon_file]:
+        try: session = await action(f'sessions/{session_name}.session')
+        except: ...
+        else: break
+
+    if not session:
+        return None
+
+    return session.to_pyrogram_string()
+
+
 async def get_tg_clients() -> list[Client]:
     session_names = get_session_names()
 
@@ -56,6 +70,7 @@ async def get_tg_clients() -> list[Client]:
         name=session_name,
         api_id=settings.API_ID,
         api_hash=settings.API_HASH,
+        session_string=(await get_session_string(session_name=session_name)),
         workdir='sessions/',
         plugins=dict(root='bot/plugins')
     ) for session_name in session_names]
