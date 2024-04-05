@@ -164,7 +164,7 @@ class Slapper:
 
     async def send_slaps(self, http_client: aiohttp.ClientSession, slaps: int, active_turbo: bool) -> dict[str]:
         try:
-            timestamp = round(datetime.timestamp(datetime.now()), 3) * 1000
+            timestamp = (round(datetime.timestamp(datetime.now()), 3) - 10) * 1000
             response = await http_client.post(
                 url='https://elcevb3oz4.execute-api.eu-central-1.amazonaws.com/game/save-clicks',
                 json={'amount': slaps, 'isTurbo': active_turbo, 'startTimestamp': timestamp})
