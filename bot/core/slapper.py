@@ -206,200 +206,221 @@ class Slapper:
             if proxy:
                 await self.check_proxy(http_client=http_client, proxy=proxy)
 
-            try:
-                local_token = local_db[self.session_name]['Token']
-                if not local_token:
-                    tg_web_data = await self.get_tg_web_data(proxy=proxy)
-                    access_token = await self.login(http_client=http_client, tg_web_data=tg_web_data)
+            while True:
+                try:
+                    local_token = local_db[self.session_name]['Token']
+                    if not local_token:
+                        tg_web_data = await self.get_tg_web_data(proxy=proxy)
+                        access_token = await self.login(http_client=http_client, tg_web_data=tg_web_data)
 
-                    http_client.headers["Authorization"] = f"Bearer {access_token}"
-                    headers["Authorization"] = f"Bearer {access_token}"
+                        http_client.headers["Authorization"] = f"Bearer {access_token}"
+                        headers["Authorization"] = f"Bearer {access_token}"
 
-                    local_db[self.session_name]['Token'] = access_token
+                        local_db[self.session_name]['Token'] = access_token
 
-                    profile_data = await self.get_profile_data(http_client=http_client)
+                        profile_data = await self.get_profile_data(http_client=http_client)
 
-                    balance = profile_data['score']
+                        balance = profile_data['score']
 
-                    slap_level = profile_data['energyPerTap']
+                        slap_level = profile_data['energyPerTap']
+
+                        local_db[self.session_name]['Balance'] = balance
+                        local_db[self.session_name]['SlapLevel'] = slap_level
+
+                        earned_for_today = profile_data['earnedScoreToday']
+                        earned_for_week = profile_data['earnedScoreThisWeek']
+
+                        rank = profile_data['rank']
+
+                        logger.info(f"{self.session_name} | Balance: <c>{balance}</c> | Rank: <m>{rank}</m>")
+
+                        logger.info(f"{self.session_name} | Earned today: <g>+{earned_for_today}</g>")
+                        logger.info(f"{self.session_name} | Earned week: <g>+{earned_for_week}</g>")
+                    else:
+                        http_client.headers["Authorization"] = f"Bearer {local_token}"
+
+                        balance = local_db[self.session_name]['Balance']
+                        slap_level = local_db[self.session_name]['SlapLevel']
+
+                    slaps = randint(a=settings.RANDOM_SLAPS_COUNT[0], b=settings.RANDOM_SLAPS_COUNT[1])
+
+                    if active_turbo:
+                        slaps += settings.ADD_SLAPS_ON_TURBO
+
+                    slaps *= slap_level
+
+                    player_data = await self.send_slaps(http_client=http_client, slaps=slaps, active_turbo=active_turbo)
+
+                    if not player_data:
+                        await save_log(
+                            db_pool=self.db_pool,
+                            phone=self.user_data.phone_number,
+                            status="ERROR",
+                            amount=balance,
+                        )
+                        continue
+
+                    available_energy = player_data['energyLeft']
+                    new_balance = player_data['score']
+                    calc_slaps = new_balance - balance
+                    balance = new_balance
+                    total = player_data['totalEarnedScore']
 
                     local_db[self.session_name]['Balance'] = balance
-                    local_db[self.session_name]['SlapLevel'] = slap_level
 
-                    earned_for_today = profile_data['earnedScoreToday']
-                    earned_for_week = profile_data['earnedScoreThisWeek']
+                    daily_turbo_count, daily_energy_count = await self.get_daily_boosts(http_client=http_client)
 
-                    rank = profile_data['rank']
+                    upgradable_boosts = await self.get_upgradable_boosts(http_client=http_client)
 
-                    logger.info(f"{self.session_name} | Balance: <c>{balance}</c> | Rank: <m>{rank}</m>")
+                    next_slap_price = upgradable_boosts[2]['priceInScore']
+                    next_slap_level = upgradable_boosts[2]['level']
+                    next_energy_level = upgradable_boosts[0]['level']
+                    next_energy_price = upgradable_boosts[0]['priceInScore']
+                    next_charge_level = upgradable_boosts[1]['level']
+                    next_charge_price = upgradable_boosts[1]['priceInScore']
 
-                    logger.info(f"{self.session_name} | Earned today: <g>+{earned_for_today}</g>")
-                    logger.info(f"{self.session_name} | Earned week: <g>+{earned_for_week}</g>")
-                else:
-                    http_client.headers["Authorization"] = f"Bearer {local_token}"
+                    logger.success(f"{self.session_name} | Successful slapped! | "
+                                   f"Balance: <c>{balance}</c> (<g>+{calc_slaps}</g>) | Total: <e>{total}</e>")
 
-                    balance = local_db[self.session_name]['Balance']
-                    slap_level = local_db[self.session_name]['SlapLevel']
-
-                slaps = randint(a=settings.RANDOM_SLAPS_COUNT[0], b=settings.RANDOM_SLAPS_COUNT[1])
-
-                if active_turbo:
-                    slaps += settings.ADD_SLAPS_ON_TURBO
-
-                slaps *= slap_level
-
-                player_data = await self.send_slaps(http_client=http_client, slaps=slaps, active_turbo=active_turbo)
-
-                if not player_data:
                     await save_log(
                         db_pool=self.db_pool,
                         phone=self.user_data.phone_number,
-                        status="ERROR",
+                        status="SLAP",
                         amount=balance,
                     )
 
-                available_energy = player_data['energyLeft']
-                new_balance = player_data['score']
-                calc_slaps = new_balance - balance
-                balance = new_balance
-                total = player_data['totalEarnedScore']
-
-                local_db[self.session_name]['Balance'] = balance
-
-                daily_turbo_count, daily_energy_count = await self.get_daily_boosts(http_client=http_client)
-
-                upgradable_boosts = await self.get_upgradable_boosts(http_client=http_client)
-
-                next_slap_price = upgradable_boosts[2]['priceInScore']
-                next_slap_level = upgradable_boosts[2]['level']
-                next_energy_level = upgradable_boosts[0]['level']
-                next_energy_price = upgradable_boosts[0]['priceInScore']
-                next_charge_level = upgradable_boosts[1]['level']
-                next_charge_price = upgradable_boosts[1]['priceInScore']
-
-                logger.success(f"{self.session_name} | Successful slapped! | "
-                               f"Balance: <c>{balance}</c> (<g>+{calc_slaps}</g>) | Total: <e>{total}</e>")
-
-                await save_log(
-                    db_pool=self.db_pool,
-                    phone=self.user_data.phone_number,
-                    status="SLAP",
-                    amount=balance,
-                )
-
-                if active_turbo is False:
-                    if (daily_energy_count > 0
-                            and available_energy < settings.MIN_AVAILABLE_ENERGY
-                            and settings.APPLY_DAILY_ENERGY is True):
-                        logger.info(f"{self.session_name} | Sleep 5s before activating the daily energy boost")
-                        await asyncio.sleep(delay=5)
-
-                        status = await self.apply_boost(http_client=http_client, boost_type=FreeBoosts.ENERGY)
-                        if status is True:
-                            logger.success(f"{self.session_name} | Energy boost applied")
-
-                            await save_log(
-                                db_pool=self.db_pool,
-                                phone=self.user_data.phone_number,
-                                status="APPLY ENERGY BOOST",
-                                amount=balance,
-                            )
-
+                    if active_turbo is False:
+                        if (daily_energy_count > 0
+                                and available_energy < settings.MIN_AVAILABLE_ENERGY
+                                and settings.APPLY_DAILY_ENERGY is True):
+                            logger.info(f"{self.session_name} | Sleep 5s before activating the daily energy boost")
                             await asyncio.sleep(delay=5)
 
-                    if daily_turbo_count > 0 and settings.APPLY_DAILY_TURBO is True:
-                        logger.info(f"{self.session_name} | Sleep 5s before activating the daily turbo boost")
-                        await asyncio.sleep(delay=5)
+                            status = await self.apply_boost(http_client=http_client, boost_type=FreeBoosts.ENERGY)
+                            if status is True:
+                                logger.success(f"{self.session_name} | Energy boost applied")
 
-                        status = await self.apply_boost(http_client=http_client, boost_type=FreeBoosts.TURBO)
-                        if status is True:
-                            logger.success(f"{self.session_name} | Turbo boost applied")
+                                await save_log(
+                                    db_pool=self.db_pool,
+                                    phone=self.user_data.phone_number,
+                                    status="APPLY ENERGY BOOST",
+                                    amount=balance,
+                                )
 
-                            await save_log(
-                                db_pool=self.db_pool,
-                                phone=self.user_data.phone_number,
-                                status="APPLY TURBO BOOST",
-                                amount=balance,
-                            )
+                                await asyncio.sleep(delay=5)
 
+                                continue
+
+                        if daily_turbo_count > 0 and settings.APPLY_DAILY_TURBO is True:
+                            logger.info(f"{self.session_name} | Sleep 5s before activating the daily turbo boost")
                             await asyncio.sleep(delay=5)
 
-                            active_turbo = True
+                            status = await self.apply_boost(http_client=http_client, boost_type=FreeBoosts.TURBO)
+                            if status is True:
+                                logger.success(f"{self.session_name} | Turbo boost applied")
 
-                    if (settings.AUTO_UPGRADE_SLAP is True
-                            and balance > next_slap_price
-                            and next_slap_level <= settings.MAX_SLAP_LEVEL):
-                        logger.info(f"{self.session_name} | Sleep 5s before upgrade slap to {next_slap_level} lvl")
-                        await asyncio.sleep(delay=5)
+                                await save_log(
+                                    db_pool=self.db_pool,
+                                    phone=self.user_data.phone_number,
+                                    status="APPLY TURBO BOOST",
+                                    amount=balance,
+                                )
 
-                        status = await self.upgrade_boost(http_client=http_client,
-                                                          boost_type=UpgradableBoosts.SLAP)
-                        if status is True:
-                            logger.success(f"{self.session_name} | Slap upgraded to {next_slap_level} lvl")
+                                await asyncio.sleep(delay=5)
 
-                            await save_log(
-                                db_pool=self.db_pool,
-                                phone=self.user_data.phone_number,
-                                status="UPGRADE SLAP",
-                                amount=balance,
-                            )
+                                active_turbo = True
 
+                                continue
+
+                        if (settings.AUTO_UPGRADE_SLAP is True
+                                and balance > next_slap_price
+                                and next_slap_level <= settings.MAX_SLAP_LEVEL):
+                            logger.info(f"{self.session_name} | Sleep 5s before upgrade slap to {next_slap_level} lvl")
                             await asyncio.sleep(delay=5)
 
-                    if (settings.AUTO_UPGRADE_ENERGY is True
-                            and balance > next_energy_price
-                            and next_energy_level <= settings.MAX_ENERGY_LEVEL):
-                        logger.info(
-                            f"{self.session_name} | Sleep 5s before upgrade energy to {next_energy_level} lvl")
-                        await asyncio.sleep(delay=5)
+                            status = await self.upgrade_boost(http_client=http_client,
+                                                              boost_type=UpgradableBoosts.SLAP)
+                            if status is True:
+                                logger.success(f"{self.session_name} | Slap upgraded to {next_slap_level} lvl")
 
-                        status = await self.upgrade_boost(http_client=http_client,
-                                                          boost_type=UpgradableBoosts.ENERGY)
-                        if status is True:
-                            logger.success(f"{self.session_name} | Energy upgraded to {next_energy_level} lvl")
+                                await save_log(
+                                    db_pool=self.db_pool,
+                                    phone=self.user_data.phone_number,
+                                    status="UPGRADE SLAP",
+                                    amount=balance,
+                                )
 
-                            await save_log(
-                                db_pool=self.db_pool,
-                                phone=self.user_data.phone_number,
-                                status="UPGRADE ENERGY",
-                                amount=balance,
-                            )
+                                await asyncio.sleep(delay=5)
 
+                                continue
+
+                        if (settings.AUTO_UPGRADE_ENERGY is True
+                                and balance > next_energy_price
+                                and next_energy_level <= settings.MAX_ENERGY_LEVEL):
+                            logger.info(
+                                f"{self.session_name} | Sleep 5s before upgrade energy to {next_energy_level} lvl")
                             await asyncio.sleep(delay=5)
 
-                    if (settings.AUTO_UPGRADE_CHARGE is True
-                            and balance > next_charge_price
-                            and next_charge_level <= settings.MAX_CHARGE_LEVEL):
-                        logger.info(
-                            f"{self.session_name} | Sleep 5s before upgrade charge to {next_charge_level} lvl")
-                        await asyncio.sleep(delay=5)
+                            status = await self.upgrade_boost(http_client=http_client,
+                                                              boost_type=UpgradableBoosts.ENERGY)
+                            if status is True:
+                                logger.success(f"{self.session_name} | Energy upgraded to {next_energy_level} lvl")
 
-                        status = await self.upgrade_boost(http_client=http_client,
-                                                          boost_type=UpgradableBoosts.CHARGE)
-                        if status is True:
-                            logger.success(f"{self.session_name} | Charge upgraded to {next_charge_level} lvl")
+                                await save_log(
+                                    db_pool=self.db_pool,
+                                    phone=self.user_data.phone_number,
+                                    status="UPGRADE ENERGY",
+                                    amount=balance,
+                                )
 
-                            await save_log(
-                                db_pool=self.db_pool,
-                                phone=self.user_data.phone_number,
-                                status="UPGRADE CHARGE",
-                                amount=balance,
-                            )
+                                await asyncio.sleep(delay=5)
 
+                                continue
+
+                        if (settings.AUTO_UPGRADE_CHARGE is True
+                                and balance > next_charge_price
+                                and next_charge_level <= settings.MAX_CHARGE_LEVEL):
+                            logger.info(
+                                f"{self.session_name} | Sleep 5s before upgrade charge to {next_charge_level} lvl")
                             await asyncio.sleep(delay=5)
 
-                    if available_energy < settings.MIN_AVAILABLE_ENERGY:
-                        logger.info(f"{self.session_name} | Minimum energy reached: {available_energy}")
-                        logger.info(f"{self.session_name} | Sleep {settings.SLEEP_BY_MIN_ENERGY}s")
+                            status = await self.upgrade_boost(http_client=http_client,
+                                                              boost_type=UpgradableBoosts.CHARGE)
+                            if status is True:
+                                logger.success(f"{self.session_name} | Charge upgraded to {next_charge_level} lvl")
 
-                        await asyncio.sleep(delay=settings.SLEEP_BY_MIN_ENERGY)
+                                await save_log(
+                                    db_pool=self.db_pool,
+                                    phone=self.user_data.phone_number,
+                                    status="UPGRADE CHARGE",
+                                    amount=balance,
+                                )
 
-            except InvalidSession as error:
-                raise error
+                                await asyncio.sleep(delay=5)
 
-            except Exception as error:
-                logger.error(f"{self.session_name} | Unknown error: {error}")
-                await asyncio.sleep(delay=7)
+                                continue
+
+                        if available_energy < settings.MIN_AVAILABLE_ENERGY:
+                            logger.info(f"{self.session_name} | Minimum energy reached: {available_energy}")
+                            logger.info(f"{self.session_name} | Next sessions pack")
+
+                            break
+
+                except InvalidSession as error:
+                    raise error
+
+                except Exception as error:
+                    logger.error(f"{self.session_name} | Unknown error: {error}")
+                    await asyncio.sleep(delay=7)
+
+                else:
+                    sleep_between_clicks = randint(a=settings.SLEEP_BETWEEN_SLAP[0], b=settings.SLEEP_BETWEEN_SLAP[1])
+
+                    if active_turbo is True:
+                        sleep_between_clicks = 4
+
+                    logger.info(f"Sleep {sleep_between_clicks}s")
+                    await asyncio.sleep(delay=sleep_between_clicks)
 
 
 async def run_slapper(tg_client: Client, db_pool: async_sessionmaker):
