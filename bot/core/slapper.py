@@ -431,11 +431,16 @@ class Slapper:
 
 async def run_slapper(tg_client: Client, db_pool: async_sessionmaker):
     try:
-        async with tg_client:
-            user_data = await tg_client.get_me()
-
         if not local_db.get(tg_client.name):
-            local_db[tg_client.name] = {'Token': '', 'Balance': 0, 'SlapLevel': 1}
+            local_db[tg_client.name] = {'UserData': None, 'Token': '', 'Balance': 0, 'SlapLevel': 1}
+
+        if not local_db[tg_client.name]['UserData']:
+            async with tg_client:
+                user_data = await tg_client.get_me()
+
+                local_db[tg_client.name]['UserData'] = user_data
+        else:
+            user_data = local_db[tg_client.name]['UserData']
 
         proxy = None
         if settings.USE_PROXY_FROM_DB:
