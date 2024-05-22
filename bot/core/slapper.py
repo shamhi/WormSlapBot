@@ -199,6 +199,7 @@ class Slapper:
             return False
 
     async def run(self, proxy: str | None) -> None:
+        access_token_created_time = 0
         active_turbo = False
 
         proxy_conn = ProxyConnector().from_url(proxy) if proxy else None
@@ -214,24 +215,19 @@ class Slapper:
 
             while True:
                 try:
-                    local_token = local_db[self.session_name]['Token']
-                    if not local_token:
+                    if time() - access_token_created_time >= 1800:
                         tg_web_data = await self.get_tg_web_data(proxy=proxy)
                         access_token = await self.login(http_client=http_client, tg_web_data=tg_web_data)
 
                         http_client.headers["Authorization"] = f"Bearer {access_token}"
-                        headers["Authorization"] = f"Bearer {access_token}"
 
-                        local_db[self.session_name]['Token'] = access_token
+                        access_token_created_time = time()
 
                         profile_data = await self.get_profile_data(http_client=http_client)
 
                         balance = profile_data['score']
 
                         slap_level = profile_data['energyPerTap']
-
-                        local_db[self.session_name]['Balance'] = balance
-                        local_db[self.session_name]['SlapLevel'] = slap_level
 
                         earned_for_today = profile_data['earnedScoreToday']
                         earned_for_week = profile_data['earnedScoreThisWeek']
@@ -242,11 +238,6 @@ class Slapper:
 
                         logger.info(f"{self.session_name} | Earned today: <g>+{earned_for_today}</g>")
                         logger.info(f"{self.session_name} | Earned week: <g>+{earned_for_week}</g>")
-                    else:
-                        http_client.headers["Authorization"] = f"Bearer {local_token}"
-
-                        balance = local_db[self.session_name]['Balance']
-                        slap_level = local_db[self.session_name]['SlapLevel']
 
                     slaps = randint(a=settings.RANDOM_SLAPS_COUNT[0], b=settings.RANDOM_SLAPS_COUNT[1])
 
@@ -271,8 +262,6 @@ class Slapper:
                     calc_slaps = new_balance - balance
                     balance = new_balance
                     total = player_data['totalEarnedScore']
-
-                    local_db[self.session_name]['Balance'] = balance
 
                     daily_turbo_count, daily_energy_count = await self.get_daily_boosts(http_client=http_client)
 
