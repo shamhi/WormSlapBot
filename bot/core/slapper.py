@@ -201,6 +201,7 @@ class Slapper:
     async def run(self, proxy: str | None) -> None:
         access_token_created_time = 0
         active_turbo = False
+        errors_count = 0
 
         proxy_conn = ProxyConnector().from_url(proxy) if proxy else None
 
@@ -215,6 +216,10 @@ class Slapper:
 
             while True:
                 try:
+                    if errors_count > 10:
+                        logger.info(f"{self.session_name} | Errors count: <r>{errors_count}</r> | Next session pack")
+                        return
+
                     if time() - access_token_created_time >= 1800:
                         tg_web_data = await self.get_tg_web_data(proxy=proxy)
                         access_token = await self.login(http_client=http_client, tg_web_data=tg_web_data)
@@ -255,6 +260,7 @@ class Slapper:
                             status="ERROR",
                             amount=balance,
                         )
+                        errors_count += 1
                         continue
 
                     available_energy = player_data['energyLeft']
