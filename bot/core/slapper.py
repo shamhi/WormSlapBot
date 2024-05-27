@@ -414,6 +414,8 @@ class Slapper:
                     logger.error(f"{self.session_name} | Unknown error: {error}")
                     await asyncio.sleep(delay=7)
 
+                    errors_count += 1
+
                 else:
                     sleep_between_clicks = randint(a=settings.SLEEP_BETWEEN_SLAP[0], b=settings.SLEEP_BETWEEN_SLAP[1])
 
