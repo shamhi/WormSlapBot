@@ -230,6 +230,11 @@ class Slapper:
 
                         profile_data = await self.get_profile_data(http_client=http_client)
 
+                        if not profile_data:
+                            balance = 0
+                            slap_level = 1
+                            continue
+
                         balance = profile_data['score']
 
                         slap_level = profile_data['energyPerTap']
