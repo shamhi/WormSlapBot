@@ -73,7 +73,7 @@ class Slapper:
     async def login(self, http_client: aiohttp.ClientSession, tg_web_data: str) -> str:
         try:
             response = await http_client.post(
-                url='https://elcevb3oz4.execute-api.eu-central-1.amazonaws.com/auth/login',
+                url='https://api.clicker.wormfare.com/auth/login',
                 json={"initData": tg_web_data})
             response.raise_for_status()
 
@@ -88,7 +88,7 @@ class Slapper:
     async def get_profile_data(self, http_client: aiohttp.ClientSession) -> dict[str]:
         try:
             response = await http_client.get(
-                url='https://elcevb3oz4.execute-api.eu-central-1.amazonaws.com/user/profile',
+                url='https://api.clicker.wormfare.com/user/profile',
                 json={})
             response.raise_for_status()
 
@@ -103,7 +103,7 @@ class Slapper:
     async def apply_boost(self, http_client: aiohttp.ClientSession, boost_type: FreeBoosts) -> bool:
         try:
             response = await http_client.post(
-                url='https://elcevb3oz4.execute-api.eu-central-1.amazonaws.com/game/activate-daily-boost',
+                url='https://api.clicker.wormfare.com/game/activate-daily-boost',
                 json={'type': boost_type})
             response.raise_for_status()
 
@@ -117,7 +117,7 @@ class Slapper:
     async def upgrade_boost(self, http_client: aiohttp.ClientSession, boost_type: UpgradableBoosts) -> bool:
         try:
             response = await http_client.post(
-                url='https://elcevb3oz4.execute-api.eu-central-1.amazonaws.com/game/buy-boost',
+                url='https://api.clicker.wormfare.com/game/buy-boost',
                 json={'type': boost_type})
             response.raise_for_status()
 
@@ -131,7 +131,7 @@ class Slapper:
     async def get_daily_boosts(self, http_client: aiohttp.ClientSession) -> tuple[int, int]:
         try:
             response = await http_client.get(
-                url='https://elcevb3oz4.execute-api.eu-central-1.amazonaws.com/game/daily-boosts',
+                url='https://api.clicker.wormfare.com/game/daily-boosts',
                 json={})
             response.raise_for_status()
 
@@ -150,7 +150,7 @@ class Slapper:
     async def get_upgradable_boosts(self, http_client: aiohttp.ClientSession) -> list[dict[str]]:
         try:
             response = await http_client.get(
-                url='https://elcevb3oz4.execute-api.eu-central-1.amazonaws.com/game/available-boosts',
+                url='https://api.clicker.wormfare.com/game/available-boosts',
                 json={})
             response.raise_for_status()
 
@@ -166,7 +166,7 @@ class Slapper:
         try:
             timestamp = (round(datetime.timestamp(datetime.now()), 3) - 10) * 1000
             response = await http_client.post(
-                url='https://elcevb3oz4.execute-api.eu-central-1.amazonaws.com/game/save-clicks',
+                url='https://api.clicker.wormfare.com/game/save-clicks',
                 json={'amount': slaps, 'isTurbo': active_turbo, 'startTimestamp': timestamp})
             response.raise_for_status()
 
